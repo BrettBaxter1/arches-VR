@@ -99,14 +99,13 @@ public:
 	rtm::uvec2 get_iuv(const rtm::vec2& uv, const rtm::vec2& offset = rtm::vec2(0.0f)) const
 	{
 		rtm::vec2 fuv = uv * rtm::vec2(width, height) + offset;
-		// Cast to signed first to avoid undefined behavior when UVs are negative.
-		return rtm::uvec2((uint32_t) (int32_t) floorf(fuv[0]), (uint32_t) (int32_t) floorf(fuv[1]));
+		return rtm::uvec2(fuv[0], fuv[1]);
 	}
 
 	rtm::vec2 get_fract_uv(const rtm::vec2& uv) const
 	{
 		rtm::vec2 fuv = uv * rtm::vec2(width, height);
-		return (fuv - rtm::vec2((int32_t) floorf(fuv[0]), (int32_t) floorf(fuv[1])));
+		return (fuv - rtm::vec2((int32_t)fuv[0], (int32_t)fuv[1]));
 	}
 
 	Texel* get_texel_addr(const rtm::uvec2& iuv) const
