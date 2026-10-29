@@ -156,7 +156,11 @@ static TRaXKernelArgs initilize_buffers(Units::UnitMainMemoryBase** drams, const
 	TRaXKernelArgs args{};
 	args.framebuffer_width = sim_config.get_int("framebuffer-width");
 	args.framebuffer_height = sim_config.get_int("framebuffer-height");
-	args.framebuffer_size = args.framebuffer_width * args.framebuffer_height;
+	args.eye_width = args.framebuffer_width;
+	args.eye_height = args.framebuffer_height;
+	args.eye_count = 2;
+	const uint32_t pixels_per_eye = args.eye_width * args.eye_height;
+	args.framebuffer_size = args.eye_count * pixels_per_eye;
 	heap_address = align_to(page_size, heap_address);
 	args.framebuffer = reinterpret_cast<uint32_t*>(heap_address);
 	heap_address += args.framebuffer_size * sizeof(uint32_t);
@@ -166,6 +170,8 @@ static TRaXKernelArgs initilize_buffers(Units::UnitMainMemoryBase** drams, const
 
 	args.light_dir = rtm::normalize(rtm::vec3(4.5f, 42.5f, 5.0f));
 	args.camera = sim_config.camera;
+	args.cameras[0] = sim_config.cameras[0];
+	args.cameras[1] = sim_config.cameras[1];
 
 	rtm::Mesh mesh(datasets_folder + scene_name + ".obj");
 	rtm::CWBVH bvh(mesh, (cache_folder + scene_name + ".bvh").c_str(), sim_config.get_int("bvh-preset"), sim_config.get_int("bvh-merging"));
@@ -173,12 +179,18 @@ static TRaXKernelArgs initilize_buffers(Units::UnitMainMemoryBase** drams, const
 	std::vector<rtm::Ray> rays(args.framebuffer_size);
 	if(args.pregen_rays)
 	{
-		std::string ray_file = scene_name + "-" + std::to_string(args.framebuffer_width) + "-" + std::to_string(pregen_bounce) + ".rays";
+		std::vector<rtm::Ray> eye_rays(pixels_per_eye);
+		for(uint32_t eye = 0; eye < args.eye_count; ++eye)
+		{
 	#if USE_HECWBVH_V1
-		pregen_rays(&bvh.nodes[0], &bvh.nodes[0].ftb, mesh, args.framebuffer_width, args.framebuffer_height, args.camera, pregen_bounce, rays);
+			pregen_rays(&bvh.nodes[0], &bvh.nodes[0].ftb, mesh, args.eye_width, args.eye_height,
+				args.cameras[eye], pregen_bounce, eye_rays);
 	#else
-		pregen_rays(&bvh.nodes[0], &bvh.ftbs[0], mesh, args.framebuffer_width, args.framebuffer_height, args.camera, pregen_bounce, rays);
+			pregen_rays(&bvh.nodes[0], &bvh.ftbs[0], mesh, args.eye_width, args.eye_height,
+				args.cameras[eye], pregen_bounce, eye_rays);
 	#endif
+			std::copy(eye_rays.begin(), eye_rays.end(), rays.begin() + eye * pixels_per_eye);
+		}
 		args.rays = write_vector(drams, xbar, 256, rays, heap_address);
 	}
 
@@ -789,8 +801,30 @@ static void run_sim_trax(SimulationConfig& sim_config)
 	printf("Simulation time: %.0f s\n", simulation_time);
 	printf("MSIPS: %.2f\n", simulator.current_cycle * tps.size() / simulation_time / 1'000'000.0);
 
+
+	// Write output framebuffers.
 	stbi_flip_vertically_on_write(true);
-	stbi_write_png("arches-out.png", (int)kernel_args.framebuffer_width, (int)kernel_args.framebuffer_height, 4, vec_mem.data() + (size_t)kernel_args.framebuffer, 0);
+	uint32_t* framebuffer = reinterpret_cast<uint32_t*>(vec_mem.data() + (size_t)kernel_args.framebuffer);
+	uint32_t* left_framebuffer = framebuffer;
+	uint32_t* right_framebuffer = framebuffer + kernel_args.eye_width * kernel_args.eye_height;
+
+	// Output left and right eye framebuffers separetely.
+	stbi_write_png("arches-left.png", (int)kernel_args.eye_width, (int)kernel_args.eye_height, 4, left_framebuffer, 0);
+	stbi_write_png("arches-right.png", (int)kernel_args.eye_width, (int)kernel_args.eye_height, 4, right_framebuffer, 0);
+
+	// Output the combined framebuffer.
+	const size_t eye_width = kernel_args.eye_width;
+	const size_t eye_height = kernel_args.eye_height;
+	std::vector<uint32_t> side_by_side(eye_width * 2 * eye_height);
+	for(size_t y = 0; y < eye_height; ++y)
+	{
+		for(size_t x = 0; x < eye_width; ++x)
+		{
+			side_by_side[y * eye_width * 2 + x] = left_framebuffer[y * eye_width + x];
+			side_by_side[y * eye_width * 2 + eye_width + x] = right_framebuffer[y * eye_width + x];
+		}
+	}
+	stbi_write_png("arches-out.png", (int)(eye_width * 2), (int)eye_height, 4, side_by_side.data(), 0);
 
 	for(auto& tp : tps) delete tp;
 	for(auto& sfu : sfus) delete sfu;

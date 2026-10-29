@@ -41,4 +41,10 @@ struct TRaXKernelArgs
 
 	uint* material_indices;
 	rtm::Material* materials;
+
+	// Stereo rendering arguments.
+	uint32_t eye_width;
+	uint32_t eye_height;
+	uint32_t eye_count;
+	rtm::Camera cameras[2];
 };

@@ -50,21 +50,14 @@ static std::atomic_uint prim_steps = 0;
 
 inline static void kernel(const TRaXKernelArgs& args)
 {
-	constexpr uint32_t SPP = 1;
-	constexpr uint TILE_X = 4;
-	constexpr uint TILE_Y = 8;
-	constexpr uint TILE_SIZE = TILE_X * TILE_Y;
-	
+	const uint32_t pixels_per_eye = args.eye_width * args.eye_height;
 	for (uint index = fchthrd(); index < args.framebuffer_size; index = fchthrd())
 	{
-		uint tile_id = index / TILE_SIZE;
-		//tile_id = rtm::RNG::fast_hash(tile_id) % (args.framebuffer_size / TILE_SIZE);
-		uint32_t tile_x = tile_id % (args.framebuffer_width / TILE_X);
-		uint32_t tile_y = tile_id / (args.framebuffer_width / TILE_X);
-		uint thread_id = index % TILE_SIZE;
-		uint32_t x = tile_x * TILE_X + thread_id % TILE_X;
-		uint32_t y = tile_y * TILE_Y + thread_id / TILE_X;
-		uint fb_index = y * args.framebuffer_width + x;
+		const uint32_t eye = index / pixels_per_eye;
+		const uint32_t pixel = index % pixels_per_eye;
+		const uint32_t x = pixel % args.eye_width;
+		const uint32_t y = pixel / args.eye_width;
+		const uint fb_index = index;
 		
 		rtm::RNG rng(fb_index);
 		IntersectStats stats;
@@ -74,7 +67,7 @@ inline static void kernel(const TRaXKernelArgs& args)
 		for(uint32_t i = 0; i < SPP; ++i)
 		{
 			float throughput = 1.0f;
-			rtm::Ray ray = args.pregen_rays ? args.rays[fb_index] : args.camera.generate_ray_through_pixel(x, y);
+			rtm::Ray ray = args.pregen_rays ? args.rays[fb_index] : args.cameras[eye].generate_ray_through_pixel(x, y);
 			for(uint32_t j = 0; j < 3; ++j)
 			{
 				rtm::Hit hit(ray.t_max, rtm::vec2(0.0f), ~0u);
@@ -102,7 +95,7 @@ inline static void kernel(const TRaXKernelArgs& args)
 		args.framebuffer[fb_index] = (stats.node_steps * sizeof(rtm::CWBVH::Node) + stats.prim_steps * sizeof(rtm::FTB)) / SPP;
 		//args.framebuffer[fb_index] = encode_pixel(radiance / SPP);
 	#else 
-		rtm::Ray ray = args.pregen_rays ? args.rays[fb_index] : args.camera.generate_ray_through_pixel(x, y);
+		rtm::Ray ray = args.pregen_rays ? args.rays[fb_index] : args.cameras[eye].generate_ray_through_pixel(x, y);
 		rtm::Hit hit(ray.t_max, rtm::vec2(0.0f), ~0u);
 			
 	#if defined(__riscv) && (TRAX_USE_RT_CORE)
@@ -146,18 +139,20 @@ inline static void kernel(const TRaXKernelArgs& args)
 inline static void mandelbrot(const TRaXKernelArgs& args)
 {
 	constexpr uint MAX_ITERS = 100;
+	const uint32_t pixels_per_eye = args.eye_width * args.eye_height;
 	for(uint index = fchthrd(); index < args.framebuffer_size; index = fchthrd())
 	{
 		rtm::Ray ray = args.rays[index];
 
 		// convert 1-d loop in to 2-d loop indices
-		const int i = index / args.framebuffer_width;
-		const int j = index % args.framebuffer_width;
+		const uint32_t pixel = index % pixels_per_eye;
+		const int i = pixel / args.eye_width;
+		const int j = pixel % args.eye_width;
 
 		float zreal = 0.0f;
 		float zimag = 0.0f;
-		float creal = (j - args.framebuffer_width / 1.4f) / (args.framebuffer_width / 2.0f);
-		float cimag = (i - args.framebuffer_height / 2.0f) / (args.framebuffer_height / 2.0f);
+		float creal = (j - args.eye_width / 1.4f) / (args.eye_width / 2.0f);
+		float cimag = (i - args.eye_height / 2.0f) / (args.eye_height / 2.0f);
 
 		float lengthsq;
 		uint k = 0;
@@ -197,10 +192,14 @@ int main(int argc, char* argv[])
 	std::string dataset_dir = sim_config.get_string("dataset-dir");
 	uint pregen_bounce = sim_config.get_int("pregen-bounce");
 
-	TRaXKernelArgs args;
+	TRaXKernelArgs args{};
 	args.framebuffer_width = sim_config.get_int("framebuffer-width");
 	args.framebuffer_height = sim_config.get_int("framebuffer-height");
-	args.framebuffer_size = args.framebuffer_width * args.framebuffer_height;
+	args.eye_width = sim_config.get_int("framebuffer-width");
+	args.eye_height = sim_config.get_int("framebuffer-height");
+	args.eye_count = 2;
+	const uint32_t pixels_per_eye = args.eye_width * args.eye_height;
+	args.framebuffer_size = args.eye_count * pixels_per_eye;
 	std::vector<uint32_t> fb_vec(args.framebuffer_size);
 	args.framebuffer = fb_vec.data();
 
@@ -209,6 +208,8 @@ int main(int argc, char* argv[])
 
 	args.light_dir = rtm::normalize(rtm::vec3(4.5f, 42.5f, 5.0f));
 	args.camera = sim_config.camera;
+	args.cameras[0] = sim_config.cameras[0];
+	args.cameras[1] = sim_config.cameras[1];
 
 	std::string mesh_path = dataset_dir + "/" + scene_name + ".obj";
 	std::string bvh_cache_path = dataset_dir + "/cache/" + scene_name + ".bvh";
@@ -304,8 +305,13 @@ int main(int argc, char* argv[])
 	std::vector<rtm::Ray> rays(args.framebuffer_size);
 	if(args.pregen_rays)
 	{
-		std::string ray_file = scene_name + "-" + std::to_string(args.framebuffer_width) + "-" + std::to_string(pregen_bounce) + ".rays";
-		pregen_rays(args.nodes, args.ft_blocks, mesh, args.framebuffer_width, args.framebuffer_height, args.camera, pregen_bounce, rays);
+		std::vector<rtm::Ray> eye_rays(pixels_per_eye);
+		for(uint32_t eye = 0; eye < args.eye_count; ++eye)
+		{
+			pregen_rays(args.nodes, args.ft_blocks, mesh, args.eye_width, args.eye_height,
+				args.cameras[eye], pregen_bounce, eye_rays);
+			std::copy(eye_rays.begin(), eye_rays.end(), rays.begin() + eye * pixels_per_eye);
+		}
 		args.rays = rays.data();
 	}
 
@@ -352,7 +358,9 @@ int main(int argc, char* argv[])
 #endif
 
 	stbi_flip_vertically_on_write(true);
-	stbi_write_png("trax_out.png", args.framebuffer_width, args.framebuffer_height, 4, args.framebuffer, 0);
+	stbi_write_png("trax-left.png", args.eye_width, args.eye_height, 4, args.framebuffer, 0);
+	stbi_write_png("trax-right.png", args.eye_width, args.eye_height, 4,
+		args.framebuffer + pixels_per_eye, 0);
 
 	return 0;
 }

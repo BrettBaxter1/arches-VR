@@ -50,6 +50,7 @@ public:
 	};
 
 	rtm::Camera camera;
+	rtm::Camera cameras[2];
 
 private:
 	std::map<std::string, Param> _params;
@@ -76,6 +77,7 @@ public:
 		set_param("scene-name", "sponza");
 		set_param("framebuffer-width", 1024);
 		set_param("framebuffer-height", 1024);
+		set_param("ipd", 0.064f); // interpupillary distance
 		set_param("pregen-rays", 0);
 		set_param("pregen-bounce", 1);
 		set_param("bvh-preset", 0);
@@ -112,6 +114,16 @@ public:
 
 		camera = rtm::Camera(get_int("framebuffer-width"), get_int("framebuffer-height"),
 			scene_configs[scene_id].focal_length, scene_configs[scene_id].cam_pos, scene_configs[scene_id].cam_target);
+
+		// Set up stereo rendering cameras.
+		// There are two cameras, each offset by
+		// 1/2 the interpupillary distance.
+		cameras[0] = camera;
+		cameras[1] = camera;
+		rtm::vec3 eye_right = rtm::normalize(camera._x);
+		float half_ipd = get_float("ipd") * 0.5f;
+		cameras[0]._position -= eye_right * half_ipd;
+		cameras[1]._position += eye_right * half_ipd;
 
 		print();
 	}

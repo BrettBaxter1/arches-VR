@@ -9,6 +9,7 @@ datasets
 
 # directories
 [Bb]uild*
+datasets
 venv
 
 ## log info
