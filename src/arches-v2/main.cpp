@@ -172,6 +172,8 @@ static TRaXKernelArgs initilize_buffers(Units::UnitMainMemoryBase** drams, const
 	args.camera = sim_config.camera;
 	args.cameras[0] = sim_config.cameras[0];
 	args.cameras[1] = sim_config.cameras[1];
+	args.projection_offsets[0] = sim_config.projection_offsets[0];
+	args.projection_offsets[1] = sim_config.projection_offsets[1];
 
 	rtm::Mesh mesh(datasets_folder + scene_name + ".obj");
 	rtm::CWBVH bvh(mesh, (cache_folder + scene_name + ".bvh").c_str(), sim_config.get_int("bvh-preset"), sim_config.get_int("bvh-merging"));
@@ -184,10 +186,10 @@ static TRaXKernelArgs initilize_buffers(Units::UnitMainMemoryBase** drams, const
 		{
 	#if USE_HECWBVH_V1
 			pregen_rays(&bvh.nodes[0], &bvh.nodes[0].ftb, mesh, args.eye_width, args.eye_height,
-				args.cameras[eye], pregen_bounce, eye_rays);
+				args.cameras[eye], pregen_bounce, eye_rays, "", args.projection_offsets[eye]);
 	#else
 			pregen_rays(&bvh.nodes[0], &bvh.ftbs[0], mesh, args.eye_width, args.eye_height,
-				args.cameras[eye], pregen_bounce, eye_rays);
+				args.cameras[eye], pregen_bounce, eye_rays, "", args.projection_offsets[eye]);
 	#endif
 			std::copy(eye_rays.begin(), eye_rays.end(), rays.begin() + eye * pixels_per_eye);
 		}

@@ -300,7 +300,7 @@ inline void deinterleave_bits(uint i, uint& x, uint& y)
 
 #ifndef __riscv 
 template <typename N, typename P>
-inline void pregen_rays(const N* nodes, const P* prims, rtm::Mesh& mesh, uint framebuffer_width, uint framebuffer_height, const rtm::Camera& camera, uint bounces, std::vector<rtm::Ray>& rays, std::string ray_file = "")
+inline void pregen_rays(const N* nodes, const P* prims, rtm::Mesh& mesh, uint framebuffer_width, uint framebuffer_height, const rtm::Camera& camera, uint bounces, std::vector<rtm::Ray>& rays, std::string ray_file = "", rtm::vec2 projection_offset = rtm::vec2(0.0f))
 {
 	const uint framebuffer_size = framebuffer_width * framebuffer_height;
 	printf("Generating bounce %d rays from %d path\n", bounces, framebuffer_size);
@@ -312,7 +312,7 @@ inline void pregen_rays(const N* nodes, const P* prims, rtm::Mesh& mesh, uint fr
 		uint32_t y = index / framebuffer_width;
 		rtm::RNG rng(index);
 
-		rtm::Ray ray = camera.generate_ray_through_pixel(x, y); // Assuming spp = 1
+		rtm::Ray ray = camera.generate_ray_through_pixel(x, y, projection_offset, nullptr); // Assuming spp = 1
 	
 		for(uint i = 0; i < bounces; ++i)
 		{

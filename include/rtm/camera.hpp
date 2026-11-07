@@ -43,11 +43,20 @@ public:
 
 	Ray generate_ray_through_pixel(uint i, uint j, rtm::RNG* rng = nullptr) const
 	{
+		return generate_ray_through_pixel(i, j, rtm::vec2(0.0f), rng);
+	}
+
+	// projection_offset is expressed in normalized image-plane coordinates.
+	// Positive x shifts the rays toward camera-right before applying the
+	// camera's field-of-view scale.
+	Ray generate_ray_through_pixel(uint i, uint j, rtm::vec2 projection_offset, rtm::RNG* rng) const
+	{
 		rtm::vec2 uv((float)i, (float)j);
 		if(rng) uv += rng->randv2();
 		else    uv += rtm::vec2(0.5f);
 		uv *= _recip_res;
 		uv -= rtm::vec2(0.5f);
+		uv += projection_offset;
 
 		Ray ray;
 		ray.d = (_x * uv.x + _y * uv.y - _z);
@@ -60,10 +69,16 @@ public:
 
 	Frustum generate_frustum_for_tile(uint i, uint j) const
 	{
+		return generate_frustum_for_tile(i, j, rtm::vec2(0.0f));
+	}
+
+	Frustum generate_frustum_for_tile(uint i, uint j, rtm::vec2 projection_offset) const
+	{
 		rtm::vec2 uv((float)i, (float)j);
 		uv += rtm::vec2(0.5f);
 		uv *= _recip_res;
 		uv -= rtm::vec2(0.5f);
+		uv += projection_offset;
 
 		Frustum ray_packet;
 		ray_packet.d = (_x * uv.x + _y * uv.y - _z);

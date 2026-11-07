@@ -51,6 +51,7 @@ public:
 
 	rtm::Camera camera;
 	rtm::Camera cameras[2];
+	rtm::vec2 projection_offsets[2];
 
 private:
 	std::map<std::string, Param> _params;
@@ -78,6 +79,7 @@ public:
 		set_param("framebuffer-width", 1024);
 		set_param("framebuffer-height", 1024);
 		set_param("ipd", 0.064f); // interpupillary distance
+		set_param("convergence-distance", 0.0f); // zero means parallel projection at infinity
 		set_param("pregen-rays", 0);
 		set_param("pregen-bounce", 1);
 		set_param("bvh-preset", 0);
@@ -124,6 +126,20 @@ public:
 		float half_ipd = get_float("ipd") * 0.5f;
 		cameras[0]._position -= eye_right * half_ipd;
 		cameras[1]._position += eye_right * half_ipd;
+
+		// Use off-axis parallel projection when a finite convergence distance is
+		// requested. The offset is normalized by the camera's image-plane scale
+		// so the central rays of both eyes meet at the requested distance.
+		projection_offsets[0] = rtm::vec2(0.0f);
+		projection_offsets[1] = rtm::vec2(0.0f);
+		float convergence_distance = get_float("convergence-distance");
+		if(convergence_distance > 0.0f)
+		{
+			float projection_shift = half_ipd /
+				(convergence_distance * rtm::length(camera._x));
+			projection_offsets[0].x = projection_shift;
+			projection_offsets[1].x = -projection_shift;
+		}
 
 		print();
 	}

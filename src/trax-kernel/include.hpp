@@ -47,4 +47,5 @@ struct TRaXKernelArgs
 	uint32_t eye_height;
 	uint32_t eye_count;
 	rtm::Camera cameras[2];
+	rtm::vec2 projection_offsets[2];
 };

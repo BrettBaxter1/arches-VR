@@ -67,7 +67,7 @@ inline static void kernel(const TRaXKernelArgs& args)
 		for(uint32_t i = 0; i < SPP; ++i)
 		{
 			float throughput = 1.0f;
-			rtm::Ray ray = args.pregen_rays ? args.rays[fb_index] : args.cameras[eye].generate_ray_through_pixel(x, y);
+			rtm::Ray ray = args.pregen_rays ? args.rays[fb_index] : args.cameras[eye].generate_ray_through_pixel(x, y, args.projection_offsets[eye], nullptr);
 			for(uint32_t j = 0; j < 3; ++j)
 			{
 				rtm::Hit hit(ray.t_max, rtm::vec2(0.0f), ~0u);
@@ -95,7 +95,7 @@ inline static void kernel(const TRaXKernelArgs& args)
 		args.framebuffer[fb_index] = (stats.node_steps * sizeof(rtm::CWBVH::Node) + stats.prim_steps * sizeof(rtm::FTB)) / SPP;
 		//args.framebuffer[fb_index] = encode_pixel(radiance / SPP);
 	#else 
-		rtm::Ray ray = args.pregen_rays ? args.rays[fb_index] : args.cameras[eye].generate_ray_through_pixel(x, y);
+		rtm::Ray ray = args.pregen_rays ? args.rays[fb_index] : args.cameras[eye].generate_ray_through_pixel(x, y, args.projection_offsets[eye], nullptr);
 		rtm::Hit hit(ray.t_max, rtm::vec2(0.0f), ~0u);
 			
 	#if defined(__riscv) && (TRAX_USE_RT_CORE)
@@ -210,6 +210,8 @@ int main(int argc, char* argv[])
 	args.camera = sim_config.camera;
 	args.cameras[0] = sim_config.cameras[0];
 	args.cameras[1] = sim_config.cameras[1];
+	args.projection_offsets[0] = sim_config.projection_offsets[0];
+	args.projection_offsets[1] = sim_config.projection_offsets[1];
 
 	std::string mesh_path = dataset_dir + "/" + scene_name + ".obj";
 	std::string bvh_cache_path = dataset_dir + "/cache/" + scene_name + ".bvh";
@@ -309,7 +311,7 @@ int main(int argc, char* argv[])
 		for(uint32_t eye = 0; eye < args.eye_count; ++eye)
 		{
 			pregen_rays(args.nodes, args.ft_blocks, mesh, args.eye_width, args.eye_height,
-				args.cameras[eye], pregen_bounce, eye_rays);
+				args.cameras[eye], pregen_bounce, eye_rays, "", args.projection_offsets[eye]);
 			std::copy(eye_rays.begin(), eye_rays.end(), rays.begin() + eye * pixels_per_eye);
 		}
 		args.rays = rays.data();
