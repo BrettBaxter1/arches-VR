@@ -25,8 +25,14 @@ public:
 	UnitAtomicRegfile(uint num_clients) : UnitMemoryBase(),
 		_request_network(num_clients, 1), _return_network(1, num_clients)
 	{
-		for (uint i = 0; i < 32; ++i)
+		reset();
+	}
+
+	void reset() override
+	{
+		for(uint i = 0; i < 32; ++i)
 			iregs[i] = 0;
+		_current_request_valid = false;
 	}
 
 	void clock_rise() override

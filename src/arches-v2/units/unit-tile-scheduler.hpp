@@ -33,6 +33,14 @@ public:
 	UnitThreadScheduler(uint num_tp, uint tm_index, UnitAtomicRegfile* atomic_regs, uint block_size) : UnitMemoryBase(),
 		_block_size(block_size), _request_network(num_tp, 1), _return_network(num_tp), _num_tp(num_tp), _tm_index(tm_index), _atomic_regs(atomic_regs)
 	{
+		reset();
+	}
+
+	void reset() override
+	{
+		_current_request_valid = false;
+		_stalled_for_atomic_reg = false;
+		_current_block = 0;
 		_current_offset = _block_size;
 	}
 

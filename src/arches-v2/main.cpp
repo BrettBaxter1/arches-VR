@@ -164,6 +164,8 @@ static TRaXKernelArgs initilize_buffers(Units::UnitMainMemoryBase** drams, const
 	heap_address = align_to(page_size, heap_address);
 	args.framebuffer = reinterpret_cast<uint32_t*>(heap_address);
 	heap_address += args.framebuffer_size * sizeof(uint32_t);
+	args.postprocess_framebuffer = reinterpret_cast<uint32_t*>(heap_address);
+	heap_address += args.framebuffer_size * sizeof(uint32_t);
 
 	args.pregen_rays = sim_config.get_int("pregen-rays");
 	uint pregen_bounce = sim_config.get_int("pregen-bounce");
@@ -239,6 +241,15 @@ static TRaXKernelArgs initilize_buffers(Units::UnitMainMemoryBase** drams, const
 
 static void run_sim_trax(SimulationConfig& sim_config)
 {
+	const std::string postprocess_kernel_path = sim_config.get_string("postprocess-kernel-path");
+	const bool run_postprocess = !postprocess_kernel_path.empty();
+	if(run_postprocess && !std::filesystem::exists(postprocess_kernel_path))
+	{
+		printf("Error: post-processing kernel not found: %s\n", postprocess_kernel_path.c_str());
+		printf("Build/copy the second kernel or pass --postprocess-kernel-path= to disable it.\n");
+		exit(1);
+	}
+
 #if 0 //RTX 4090 ish
 	//Compute
 	double core_clock = 2235.0e6;
@@ -691,7 +702,7 @@ static void run_sim_trax(SimulationConfig& sim_config)
 	//peak_l2_bandwidth = 32 * num_tms / 2;
 
 	auto start = std::chrono::high_resolution_clock::now();
-	simulator.execute(delta, [&]() -> void
+	auto interval_logger = [&]() -> void
 	{
 		UnitDRAM::Log dram_delta_log = delta_log(dram_log, drams);
 		UnitL2Cache::Log l2_delta_log = delta_log(l2_log, l2s);
@@ -727,7 +738,33 @@ static void run_sim_trax(SimulationConfig& sim_config)
 			printf("MRays/s: %.0f\n\n", rtc_delta_log.rays / delta_ns * 1000.0);
 			rtc_delta_log.print(rtcs.size());
 		}
-	});
+	};
+
+	simulator.execute(delta, interval_logger);
+	const cycles_t render_cycles = simulator.current_cycle;
+	cycles_t postprocess_cycles = 0;
+
+	if(run_postprocess)
+	{
+		printf("Starting post-processing kernel\n");
+
+		// The second ELF replaces the completed renderer in the same instruction
+		// memory. Scene/framebuffer data remains in simulated DRAM.
+		ELF postprocess_elf(postprocess_kernel_path);
+		paddr_t postprocess_code_end = postprocess_elf.load(vec_mem.data());
+		for(paddr_t addr = 0; addr < postprocess_code_end; addr += partition_stride)
+		{
+			paddr_t bytes = std::min<paddr_t>(partition_stride, postprocess_code_end - addr);
+			drams[xbar.get_partition(addr)]->direct_write(vec_mem.data() + addr, bytes, xbar.strip_partition_bits(addr));
+		}
+
+		for(auto& tp : tps)
+			tp->set_entry_point(postprocess_elf.elf_header->e_entry.u64);
+
+		const cycles_t postprocess_start = simulator.current_cycle;
+		simulator.execute(delta, interval_logger);
+		postprocess_cycles = simulator.current_cycle - postprocess_start;
+	}
 
 	auto stop = std::chrono::high_resolution_clock::now();
 
@@ -788,6 +825,9 @@ static void run_sim_trax(SimulationConfig& sim_config)
 	print_header("Performance Summary");
 	printf("Cycles: %lld\n", simulator.current_cycle);
 	printf("Clock rate: %.0f MHz\n", core_clock / 1'000'000.0);
+	printf("Render kernel time: %.3g ms\n", render_cycles / core_clock * 1000.0);
+	if(run_postprocess)
+		printf("Post-processing kernel time: %.3g ms\n", postprocess_cycles / core_clock * 1000.0);
 	printf("Frame time: %.3g ms\n", frame_time * 1000.0);
 	if(!rtcs.empty()) printf("MRays/s: %.0f\n", rtc_log.rays / frame_time / 1'000'000.0);
 	else              printf("MRays/s: %.0f\n", kernel_args.framebuffer_size / frame_time / 1'000'000.0);
@@ -806,7 +846,7 @@ static void run_sim_trax(SimulationConfig& sim_config)
 
 	// Write output framebuffers.
 	stbi_flip_vertically_on_write(true);
-	uint32_t* framebuffer = reinterpret_cast<uint32_t*>(vec_mem.data() + (size_t)kernel_args.framebuffer);
+	uint32_t* framebuffer = reinterpret_cast<uint32_t*>(vec_mem.data() + (size_t)(run_postprocess ? kernel_args.postprocess_framebuffer : kernel_args.framebuffer));
 	uint32_t* left_framebuffer = framebuffer;
 	uint32_t* right_framebuffer = framebuffer + kernel_args.eye_width * kernel_args.eye_height;
 
@@ -843,6 +883,7 @@ int main(int argc, char* argv[])
 	Arches::SimulationConfig sim_config;
 	sim_config.set_param("config-dir", Arches::get_default_config_dir());
 	sim_config.set_param("kernel-path", Arches::get_default_kernel_path());
+	sim_config.set_param("postprocess-kernel-path", Arches::get_default_postprocess_kernel_path());
 	sim_config.parse(argc, argv);
 
 	Arches::TRaX::run_sim_trax(sim_config);

@@ -1,4 +1,5 @@
 add_subdirectory("trax-kernel")
+add_subdirectory("trax-postprocess-kernel")
 add_subdirectory("arches-v2")
 
 if(ARCHES_BUILD_LEGACY_KERNEL_TOOLS)

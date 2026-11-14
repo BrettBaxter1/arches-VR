@@ -96,6 +96,21 @@ std::string get_default_kernel_path()
 	return normalize_path_string(std::filesystem::path(ARCHES_DEFAULT_KERNEL_PATH));
 }
 
+std::string get_default_postprocess_kernel_path()
+{
+	std::filesystem::path runtime_kernel_path = get_executable_folder() / "kernels" / "trax-postprocess" / "kernel";
+	if(std::filesystem::exists(runtime_kernel_path))
+		return normalize_path_string(runtime_kernel_path);
+
+	std::filesystem::path source_kernel_path = ARCHES_DEFAULT_POSTPROCESS_KERNEL_PATH;
+	if(std::filesystem::exists(source_kernel_path))
+		return normalize_path_string(source_kernel_path);
+
+	// Keep the existing one-kernel behavior until the optional second ELF has
+	// been built and copied into one of the locations above.
+	return std::string();
+}
+
 std::string join_path(std::string dir, const std::string& name)
 {
 	return ensure_trailing_slash(dir) + name;

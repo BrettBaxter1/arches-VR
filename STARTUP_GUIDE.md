@@ -233,6 +233,7 @@ Useful runtime flags:
 --dataset-dir=<path>
 --config-dir=<path>
 --kernel-path=<path>
+--postprocess-kernel-path=<path>
 --scene-name=<name>
 --framebuffer-width=<pixels>
 --framebuffer-height=<pixels>
@@ -260,6 +261,26 @@ source tree is staged next to the executables automatically:
 ```text
 src/trax-kernel/riscv/kernel  ->  build/<config>/kernels/trax/kernel
 ```
+
+The optional second-stage post-processing kernel is built separately with the
+same RISC-V/custom-ISA toolchain:
+
+```bash
+cd src/trax-postprocess-kernel
+make riscv-dissasm
+```
+
+Arches runs it after the stereo renderer when the ELF exists at either
+`src/trax-postprocess-kernel/riscv/kernel` or the staged runtime path:
+
+```text
+build/<config>/kernels/trax-postprocess/kernel
+```
+
+The initial post-processing kernel is an identity copy. It reads the rendered
+stereo framebuffer and writes a separate output framebuffer, providing the
+execution boundary for future lens-distortion processing. Use
+`--postprocess-kernel-path=` to explicitly disable the second stage.
 
 ## 9. Optional Standalone Kernel Tools
 

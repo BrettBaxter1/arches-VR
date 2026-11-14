@@ -48,4 +48,8 @@ struct TRaXKernelArgs
 	uint32_t eye_count;
 	rtm::Camera cameras[2];
 	rtm::vec2 projection_offsets[2];
+
+	// Optional second-stage output. The stereo renderer writes framebuffer;
+	// a post-processing kernel may read it and write this buffer.
+	uint32_t* postprocess_framebuffer;
 };

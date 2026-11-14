@@ -52,6 +52,7 @@ set(ARCHES_RAMULATOR_CONFIG_DIR "${PROJECT_SOURCE_DIR}/src/arches-v2/units/ramul
 
 # The prebuilt kernel checked into the source tree is staged next to the executables.
 set(ARCHES_DEFAULT_KERNEL_PATH "${PROJECT_SOURCE_DIR}/src/trax-kernel/riscv/kernel")
+set(ARCHES_DEFAULT_POSTPROCESS_KERNEL_PATH "${PROJECT_SOURCE_DIR}/src/trax-postprocess-kernel/riscv/kernel")
 
 find_package(TBB CONFIG QUIET)
 find_package(yaml-cpp CONFIG QUIET)
@@ -142,6 +143,14 @@ function(arches_stage_runtime_assets target_name)
     add_custom_command(TARGET ${target_name} POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${target_name}>/kernels/trax"
       COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ARCHES_DEFAULT_KERNEL_PATH}" "$<TARGET_FILE_DIR:${target_name}>/kernels/trax/kernel"
+      VERBATIM
+    )
+  endif()
+
+  if(EXISTS "${ARCHES_DEFAULT_POSTPROCESS_KERNEL_PATH}")
+    add_custom_command(TARGET ${target_name} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${target_name}>/kernels/trax-postprocess"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ARCHES_DEFAULT_POSTPROCESS_KERNEL_PATH}" "$<TARGET_FILE_DIR:${target_name}>/kernels/trax-postprocess/kernel"
       VERBATIM
     )
   endif()
