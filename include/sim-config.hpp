@@ -80,6 +80,11 @@ public:
 		set_param("framebuffer-height", 1024);
 		set_param("ipd", 0.064f); // interpupillary distance
 		set_param("convergence-distance", 0.0f); // zero means parallel projection at infinity
+		set_param("lens-k1", 0.10f); // initial visible barrel pre-distortion coefficient
+		set_param("lens-k2", 0.0f);
+		set_param("lens-chromatic-red", 1.01f);
+		set_param("lens-chromatic-green", 1.0f);
+		set_param("lens-chromatic-blue", 0.99f);
 		set_param("pregen-rays", 0);
 		set_param("pregen-bounce", 1);
 		set_param("bvh-preset", 0);

@@ -176,6 +176,13 @@ static TRaXKernelArgs initilize_buffers(Units::UnitMainMemoryBase** drams, const
 	args.cameras[1] = sim_config.cameras[1];
 	args.projection_offsets[0] = sim_config.projection_offsets[0];
 	args.projection_offsets[1] = sim_config.projection_offsets[1];
+	args.lens_centers[0] = rtm::vec2(0.5f, 0.5f);
+	args.lens_centers[1] = rtm::vec2(0.5f, 0.5f);
+	args.lens_k1 = sim_config.get_float("lens-k1");
+	args.lens_k2 = sim_config.get_float("lens-k2");
+	args.lens_chromatic_scale[0] = sim_config.get_float("lens-chromatic-red");
+	args.lens_chromatic_scale[1] = sim_config.get_float("lens-chromatic-green");
+	args.lens_chromatic_scale[2] = sim_config.get_float("lens-chromatic-blue");
 
 	rtm::Mesh mesh(datasets_folder + scene_name + ".obj");
 	rtm::CWBVH bvh(mesh, (cache_folder + scene_name + ".bvh").c_str(), sim_config.get_int("bvh-preset"), sim_config.get_int("bvh-merging"));

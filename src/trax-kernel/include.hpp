@@ -49,7 +49,14 @@ struct TRaXKernelArgs
 	rtm::Camera cameras[2];
 	rtm::vec2 projection_offsets[2];
 
-	// Optional second-stage output. The stereo renderer writes framebuffer;
-	// a post-processing kernel may read it and write this buffer.
+	// Second-stage post-processing data. The stereo renderer writes framebuffer;
+	// the post-processing kernel reads it and writes this buffer.
 	uint32_t* postprocess_framebuffer;
+	rtm::vec2 lens_centers[2];
+	float lens_k1;
+	float lens_k2;
+	// Per-channel radial scale factors for chromatic aberration correction.
+	// Green is the neutral channel; red and blue can use slightly different
+	// radial mappings because the lens refracts wavelengths differently.
+	float lens_chromatic_scale[3];
 };
