@@ -64,4 +64,42 @@ struct TRaXKernelArgs
 	// dimensions when overscan is enabled; the host crops to these dimensions.
 	uint32_t display_width;
 	uint32_t display_height;
+
+	// Fixed foveated sampling parameters. Rates of 1 disable foveation.
+	rtm::vec2 foveation_center;
+	float foveation_inner_radius;
+	float foveation_outer_radius;
+	uint32_t foveation_mid_rate;
+	uint32_t foveation_outer_rate;
 };
+
+inline uint32_t foveation_rate(const TRaXKernelArgs& args, uint32_t x, uint32_t y)
+{
+	const float u = ((float)x + 0.5f) / (float)args.eye_width;
+	const float v = ((float)y + 0.5f) / (float)args.eye_height;
+	const float dx = (u - args.foveation_center.x) * 2.0f;
+	const float dy = (v - args.foveation_center.y) * 2.0f;
+	const float radius_squared = dx * dx + dy * dy;
+	const float inner_squared = args.foveation_inner_radius * args.foveation_inner_radius;
+	const float outer_squared = args.foveation_outer_radius * args.foveation_outer_radius;
+
+	if(radius_squared <= inner_squared)
+		return 1u;
+	if(radius_squared <= outer_squared)
+		return args.foveation_mid_rate > 0u ? args.foveation_mid_rate : 1u;
+	return args.foveation_outer_rate > 0u ? args.foveation_outer_rate : 1u;
+}
+
+inline bool foveation_should_trace(const TRaXKernelArgs& args, uint32_t x, uint32_t y)
+{
+	const uint32_t rate = foveation_rate(args, x, y);
+	return rate == 1u || ((x % rate) == 0u && (y % rate) == 0u);
+}
+
+inline void foveation_source_pixel(const TRaXKernelArgs& args, uint32_t x, uint32_t y,
+	uint32_t& source_x, uint32_t& source_y)
+{
+	const uint32_t rate = foveation_rate(args, x, y);
+	source_x = x - (x % rate);
+	source_y = y - (y % rate);
+}

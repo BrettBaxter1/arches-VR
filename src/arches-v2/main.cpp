@@ -185,6 +185,12 @@ static TRaXKernelArgs initilize_buffers(Units::UnitMainMemoryBase** drams, const
 	args.lens_chromatic_scale[0] = sim_config.get_float("lens-chromatic-red");
 	args.lens_chromatic_scale[1] = sim_config.get_float("lens-chromatic-green");
 	args.lens_chromatic_scale[2] = sim_config.get_float("lens-chromatic-blue");
+	args.foveation_center = rtm::vec2(sim_config.get_float("foveation-center-x"),
+		sim_config.get_float("foveation-center-y"));
+	args.foveation_inner_radius = sim_config.get_float("foveation-inner-radius");
+	args.foveation_outer_radius = sim_config.get_float("foveation-outer-radius");
+	args.foveation_mid_rate = sim_config.get_int("foveation-mid-rate");
+	args.foveation_outer_rate = sim_config.get_int("foveation-outer-rate");
 
 	rtm::Mesh mesh(datasets_folder + scene_name + ".obj");
 	rtm::CWBVH bvh(mesh, (cache_folder + scene_name + ".bvh").c_str(), sim_config.get_int("bvh-preset"), sim_config.get_int("bvh-merging"));
@@ -865,6 +871,26 @@ static void run_sim_trax(SimulationConfig& sim_config)
 	const size_t crop_y = (render_height - display_height) / 2;
 	const size_t pixels_per_render_eye = render_width * render_height;
 	const size_t pixels_per_display_eye = display_width * display_height;
+	if(!run_postprocess && (kernel_args.foveation_mid_rate > 1u || kernel_args.foveation_outer_rate > 1u))
+	{
+		for(uint32_t eye = 0; eye < kernel_args.eye_count; ++eye)
+		{
+			uint32_t* eye_framebuffer = framebuffer + eye * pixels_per_render_eye;
+			for(uint32_t y = 0; y < kernel_args.eye_height; ++y)
+			{
+				for(uint32_t x = 0; x < kernel_args.eye_width; ++x)
+				{
+					if(foveation_should_trace(kernel_args, x, y))
+						continue;
+					uint32_t source_x;
+					uint32_t source_y;
+					foveation_source_pixel(kernel_args, x, y, source_x, source_y);
+					eye_framebuffer[y * kernel_args.eye_width + x] =
+						eye_framebuffer[source_y * kernel_args.eye_width + source_x];
+				}
+			}
+		}
+	}
 	std::vector<uint32_t> display_framebuffer(pixels_per_display_eye * 2);
 
 	for(size_t eye = 0; eye < 2; ++eye)

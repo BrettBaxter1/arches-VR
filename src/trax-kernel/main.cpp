@@ -58,6 +58,15 @@ inline static void kernel(const TRaXKernelArgs& args)
 		const uint32_t x = pixel % args.eye_width;
 		const uint32_t y = pixel / args.eye_width;
 		const uint fb_index = index;
+
+		// Fixed foveated sampling: only representative pixels in the middle
+		// and peripheral regions launch rays. The post-process kernel fills the
+		// skipped pixels from these samples before applying lens distortion.
+		if(!foveation_should_trace(args, x, y))
+		{
+			args.framebuffer[fb_index] = 0xff000000u;
+			continue;
+		}
 		
 		rtm::RNG rng(fb_index);
 		IntersectStats stats;
@@ -214,6 +223,12 @@ int main(int argc, char* argv[])
 	args.cameras[1] = sim_config.cameras[1];
 	args.projection_offsets[0] = sim_config.projection_offsets[0];
 	args.projection_offsets[1] = sim_config.projection_offsets[1];
+	args.foveation_center = rtm::vec2(sim_config.get_float("foveation-center-x"),
+		sim_config.get_float("foveation-center-y"));
+	args.foveation_inner_radius = sim_config.get_float("foveation-inner-radius");
+	args.foveation_outer_radius = sim_config.get_float("foveation-outer-radius");
+	args.foveation_mid_rate = sim_config.get_int("foveation-mid-rate");
+	args.foveation_outer_rate = sim_config.get_int("foveation-outer-rate");
 
 	std::string mesh_path = dataset_dir + "/" + scene_name + ".obj";
 	std::string bvh_cache_path = dataset_dir + "/cache/" + scene_name + ".bvh";
@@ -360,6 +375,29 @@ int main(int argc, char* argv[])
 	for(uint32_t i = 0; i < args.framebuffer_size; ++i)
 		args.framebuffer[i] = encode_pixel(palette((args.framebuffer[i] - 4464.0f) / (8664.0f - 4464.0f)));
 #endif
+
+	// Native TRaX does not run the post-process kernel, so reconstruct the
+	// skipped fixed-foveation samples before writing its output images.
+	if(args.foveation_mid_rate > 1u || args.foveation_outer_rate > 1u)
+	{
+		for(uint32_t eye = 0; eye < args.eye_count; ++eye)
+		{
+			uint32_t* eye_framebuffer = args.framebuffer + eye * pixels_per_eye;
+			for(uint32_t y = 0; y < args.eye_height; ++y)
+			{
+				for(uint32_t x = 0; x < args.eye_width; ++x)
+				{
+					if(foveation_should_trace(args, x, y))
+						continue;
+					uint32_t source_x;
+					uint32_t source_y;
+					foveation_source_pixel(args, x, y, source_x, source_y);
+					eye_framebuffer[y * args.eye_width + x] =
+						eye_framebuffer[source_y * args.eye_width + source_x];
+				}
+			}
+		}
+	}
 
 	stbi_flip_vertically_on_write(true);
 	const uint32_t crop_x = (args.eye_width - args.display_width) / 2;

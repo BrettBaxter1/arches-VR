@@ -88,6 +88,12 @@ public:
 		set_param("lens-chromatic-red", 1.01f);
 		set_param("lens-chromatic-green", 1.0f);
 		set_param("lens-chromatic-blue", 0.99f);
+		set_param("foveation-center-x", 0.5f);
+		set_param("foveation-center-y", 0.5f);
+		set_param("foveation-inner-radius", 0.35f);
+		set_param("foveation-outer-radius", 0.75f);
+		set_param("foveation-mid-rate", 1);
+		set_param("foveation-outer-rate", 1);
 		set_param("pregen-rays", 0);
 		set_param("pregen-bounce", 1);
 		set_param("bvh-preset", 0);
@@ -133,6 +139,21 @@ public:
 		render_width = static_cast<uint32_t>(display_width * overscan_scale + 0.5f);
 		render_height = static_cast<uint32_t>(display_height * overscan_scale + 0.5f);
 		const float render_focal_length = scene_configs[scene_id].focal_length / overscan_scale;
+		const float foveation_center_x = get_float("foveation-center-x");
+		const float foveation_center_y = get_float("foveation-center-y");
+		const float foveation_inner_radius = get_float("foveation-inner-radius");
+		const float foveation_outer_radius = get_float("foveation-outer-radius");
+		const int foveation_mid_rate = get_int("foveation-mid-rate");
+		const int foveation_outer_rate = get_int("foveation-outer-rate");
+		if(foveation_center_x < 0.0f || foveation_center_x > 1.0f ||
+			foveation_center_y < 0.0f || foveation_center_y > 1.0f ||
+			foveation_inner_radius < 0.0f || foveation_outer_radius < foveation_inner_radius ||
+			foveation_outer_radius > 1.0f || foveation_mid_rate < 1 || foveation_outer_rate < 1 ||
+			(foveation_mid_rate > 1 && foveation_outer_rate % foveation_mid_rate != 0))
+		{
+			printf("Error: invalid fixed-foveation settings\n");
+			exit(1);
+		}
 
 		// Overscan increases both the render target and the camera field of view.
 		// The final display-sized image is cropped from the centered post-process

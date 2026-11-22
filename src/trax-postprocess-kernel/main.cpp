@@ -34,6 +34,26 @@ inline static uint32_t sample_channel(const uint32_t* framebuffer, uint width, u
 	return (uint32_t)(bilinear_channel(framebuffer, width, height, x, y, channel) + 0.5f);
 }
 
+inline static uint32_t sample_foveated_channel(const TRaXKernelArgs& args,
+	const uint32_t* framebuffer, float x, float y, uint channel)
+{
+	if(x < 0.0f || x > (float)(args.eye_width - 1u) ||
+		y < 0.0f || y > (float)(args.eye_height - 1u))
+		return 0u;
+
+	const uint source_x = (uint)x;
+	const uint source_y = (uint)y;
+	const uint rate = foveation_rate(args, source_x, source_y);
+	if(rate == 1u)
+		return sample_channel(framebuffer, args.eye_width, args.eye_height, x, y, channel);
+
+	uint sample_x;
+	uint sample_y;
+	foveation_source_pixel(args, source_x, source_y, sample_x, sample_y);
+	const uint shift = channel * 8u;
+	return (framebuffer[sample_y * args.eye_width + sample_x] >> shift) & 0xffu;
+}
+
 inline static void kernel(const TRaXKernelArgs& args)
 {
 	const uint pixels_per_eye = args.eye_width * args.eye_height;
@@ -65,8 +85,8 @@ inline static void kernel(const TRaXKernelArgs& args)
 			const float source_v = center.y + dy * radial * 0.5f;
 			const float source_x = source_u * (float)args.eye_width - 0.5f;
 			const float source_y = source_v * (float)args.eye_height - 0.5f;
-			channels[channel] = sample_channel(source_framebuffer, args.eye_width,
-				args.eye_height, source_x, source_y, channel);
+			channels[channel] = sample_foveated_channel(args, source_framebuffer,
+				source_x, source_y, channel);
 		}
 
 		const uint32_t output = channels[0] | (channels[1] << 8) |
