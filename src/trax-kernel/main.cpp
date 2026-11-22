@@ -193,11 +193,13 @@ int main(int argc, char* argv[])
 	uint pregen_bounce = sim_config.get_int("pregen-bounce");
 
 	TRaXKernelArgs args{};
-	args.framebuffer_width = sim_config.get_int("framebuffer-width");
-	args.framebuffer_height = sim_config.get_int("framebuffer-height");
-	args.eye_width = sim_config.get_int("framebuffer-width");
-	args.eye_height = sim_config.get_int("framebuffer-height");
+	args.framebuffer_width = sim_config.render_width;
+	args.framebuffer_height = sim_config.render_height;
+	args.eye_width = args.framebuffer_width;
+	args.eye_height = args.framebuffer_height;
 	args.eye_count = 2;
+	args.display_width = sim_config.get_int("framebuffer-width");
+	args.display_height = sim_config.get_int("framebuffer-height");
 	const uint32_t pixels_per_eye = args.eye_width * args.eye_height;
 	args.framebuffer_size = args.eye_count * pixels_per_eye;
 	std::vector<uint32_t> fb_vec(args.framebuffer_size);
@@ -360,9 +362,20 @@ int main(int argc, char* argv[])
 #endif
 
 	stbi_flip_vertically_on_write(true);
-	stbi_write_png("trax-left.png", args.eye_width, args.eye_height, 4, args.framebuffer, 0);
-	stbi_write_png("trax-right.png", args.eye_width, args.eye_height, 4,
-		args.framebuffer + pixels_per_eye, 0);
+	const uint32_t crop_x = (args.eye_width - args.display_width) / 2;
+	const uint32_t crop_y = (args.eye_height - args.display_height) / 2;
+	std::vector<uint32_t> display_framebuffer(args.display_width * args.display_height * 2);
+	for(uint32_t eye = 0; eye < args.eye_count; ++eye)
+	{
+		const uint32_t* source = args.framebuffer + eye * pixels_per_eye;
+		uint32_t* destination = display_framebuffer.data() + eye * args.display_width * args.display_height;
+		for(uint32_t y = 0; y < args.display_height; ++y)
+			for(uint32_t x = 0; x < args.display_width; ++x)
+				destination[y * args.display_width + x] = source[(y + crop_y) * args.eye_width + x + crop_x];
+	}
+	stbi_write_png("trax-left.png", args.display_width, args.display_height, 4, display_framebuffer.data(), 0);
+	stbi_write_png("trax-right.png", args.display_width, args.display_height, 4,
+		display_framebuffer.data() + args.display_width * args.display_height, 0);
 
 	return 0;
 }

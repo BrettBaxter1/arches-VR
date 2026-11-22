@@ -59,4 +59,9 @@ struct TRaXKernelArgs
 	// Green is the neutral channel; red and blue can use slightly different
 	// radial mappings because the lens refracts wavelengths differently.
 	float lens_chromatic_scale[3];
+
+	// Final display dimensions. eye_width/eye_height remain the render
+	// dimensions when overscan is enabled; the host crops to these dimensions.
+	uint32_t display_width;
+	uint32_t display_height;
 };

@@ -154,11 +154,13 @@ static TRaXKernelArgs initilize_buffers(Units::UnitMainMemoryBase** drams, const
 	std::string cache_folder = datasets_folder + "cache/";
 
 	TRaXKernelArgs args{};
-	args.framebuffer_width = sim_config.get_int("framebuffer-width");
-	args.framebuffer_height = sim_config.get_int("framebuffer-height");
+	args.framebuffer_width = sim_config.render_width;
+	args.framebuffer_height = sim_config.render_height;
 	args.eye_width = args.framebuffer_width;
 	args.eye_height = args.framebuffer_height;
 	args.eye_count = 2;
+	args.display_width = sim_config.get_int("framebuffer-width");
+	args.display_height = sim_config.get_int("framebuffer-height");
 	const uint32_t pixels_per_eye = args.eye_width * args.eye_height;
 	args.framebuffer_size = args.eye_count * pixels_per_eye;
 	heap_address = align_to(page_size, heap_address);
@@ -851,29 +853,46 @@ static void run_sim_trax(SimulationConfig& sim_config)
 	printf("MSIPS: %.2f\n", simulator.current_cycle * tps.size() / simulation_time / 1'000'000.0);
 
 
-	// Write output framebuffers.
+	// Write display-sized output framebuffers. When overscan is enabled, the
+	// centered display region is cropped from each larger rendered eye.
 	stbi_flip_vertically_on_write(true);
 	uint32_t* framebuffer = reinterpret_cast<uint32_t*>(vec_mem.data() + (size_t)(run_postprocess ? kernel_args.postprocess_framebuffer : kernel_args.framebuffer));
-	uint32_t* left_framebuffer = framebuffer;
-	uint32_t* right_framebuffer = framebuffer + kernel_args.eye_width * kernel_args.eye_height;
+	const size_t render_width = kernel_args.eye_width;
+	const size_t render_height = kernel_args.eye_height;
+	const size_t display_width = kernel_args.display_width;
+	const size_t display_height = kernel_args.display_height;
+	const size_t crop_x = (render_width - display_width) / 2;
+	const size_t crop_y = (render_height - display_height) / 2;
+	const size_t pixels_per_render_eye = render_width * render_height;
+	const size_t pixels_per_display_eye = display_width * display_height;
+	std::vector<uint32_t> display_framebuffer(pixels_per_display_eye * 2);
 
-	// Output left and right eye framebuffers separetely.
-	stbi_write_png("arches-left.png", (int)kernel_args.eye_width, (int)kernel_args.eye_height, 4, left_framebuffer, 0);
-	stbi_write_png("arches-right.png", (int)kernel_args.eye_width, (int)kernel_args.eye_height, 4, right_framebuffer, 0);
-
-	// Output the combined framebuffer.
-	const size_t eye_width = kernel_args.eye_width;
-	const size_t eye_height = kernel_args.eye_height;
-	std::vector<uint32_t> side_by_side(eye_width * 2 * eye_height);
-	for(size_t y = 0; y < eye_height; ++y)
+	for(size_t eye = 0; eye < 2; ++eye)
 	{
-		for(size_t x = 0; x < eye_width; ++x)
+		const uint32_t* source = framebuffer + eye * pixels_per_render_eye;
+		uint32_t* destination = display_framebuffer.data() + eye * pixels_per_display_eye;
+		for(size_t y = 0; y < display_height; ++y)
 		{
-			side_by_side[y * eye_width * 2 + x] = left_framebuffer[y * eye_width + x];
-			side_by_side[y * eye_width * 2 + eye_width + x] = right_framebuffer[y * eye_width + x];
+			for(size_t x = 0; x < display_width; ++x)
+				destination[y * display_width + x] = source[(y + crop_y) * render_width + x + crop_x];
 		}
 	}
-	stbi_write_png("arches-out.png", (int)(eye_width * 2), (int)eye_height, 4, side_by_side.data(), 0);
+
+	uint32_t* left_framebuffer = display_framebuffer.data();
+	uint32_t* right_framebuffer = display_framebuffer.data() + pixels_per_display_eye;
+	stbi_write_png("arches-left.png", (int)display_width, (int)display_height, 4, left_framebuffer, 0);
+	stbi_write_png("arches-right.png", (int)display_width, (int)display_height, 4, right_framebuffer, 0);
+
+	std::vector<uint32_t> side_by_side(display_width * 2 * display_height);
+	for(size_t y = 0; y < display_height; ++y)
+	{
+		for(size_t x = 0; x < display_width; ++x)
+		{
+			side_by_side[y * display_width * 2 + x] = left_framebuffer[y * display_width + x];
+			side_by_side[y * display_width * 2 + display_width + x] = right_framebuffer[y * display_width + x];
+		}
+	}
+	stbi_write_png("arches-out.png", (int)(display_width * 2), (int)display_height, 4, side_by_side.data(), 0);
 
 	for(auto& tp : tps) delete tp;
 	for(auto& sfu : sfus) delete sfu;

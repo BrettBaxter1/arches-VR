@@ -52,6 +52,8 @@ public:
 	rtm::Camera camera;
 	rtm::Camera cameras[2];
 	rtm::vec2 projection_offsets[2];
+	uint32_t render_width = 0;
+	uint32_t render_height = 0;
 
 private:
 	std::map<std::string, Param> _params;
@@ -78,6 +80,7 @@ public:
 		set_param("scene-name", "sponza");
 		set_param("framebuffer-width", 1024);
 		set_param("framebuffer-height", 1024);
+		set_param("overscan-scale", 1.0f);
 		set_param("ipd", 0.064f); // interpupillary distance
 		set_param("convergence-distance", 0.0f); // zero means parallel projection at infinity
 		set_param("lens-k1", 0.10f); // initial visible barrel pre-distortion coefficient
@@ -119,8 +122,23 @@ public:
 		}
 		set_param("scene-id", scene_id);
 
-		camera = rtm::Camera(get_int("framebuffer-width"), get_int("framebuffer-height"),
-			scene_configs[scene_id].focal_length, scene_configs[scene_id].cam_pos, scene_configs[scene_id].cam_target);
+		const uint32_t display_width = get_int("framebuffer-width");
+		const uint32_t display_height = get_int("framebuffer-height");
+		const float overscan_scale = get_float("overscan-scale");
+		if(overscan_scale < 1.0f)
+		{
+			printf("Error: overscan-scale must be at least 1.0\n");
+			exit(1);
+		}
+		render_width = static_cast<uint32_t>(display_width * overscan_scale + 0.5f);
+		render_height = static_cast<uint32_t>(display_height * overscan_scale + 0.5f);
+		const float render_focal_length = scene_configs[scene_id].focal_length / overscan_scale;
+
+		// Overscan increases both the render target and the camera field of view.
+		// The final display-sized image is cropped from the centered post-process
+		// result, leaving enough pixels for lens distortion at the edges.
+		camera = rtm::Camera(render_width, render_height, render_focal_length,
+			scene_configs[scene_id].cam_pos, scene_configs[scene_id].cam_target);
 
 		// Set up stereo rendering cameras.
 		// There are two cameras, each offset by
